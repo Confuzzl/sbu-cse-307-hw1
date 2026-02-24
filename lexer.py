@@ -80,7 +80,6 @@ class CharStream:
         while self._has_next():
             curr = next_
             next_ = self._source[self._pos]
-            # print(f"{curr=} {next_=}")
 
             if curr == "\n":
                 raise CommentError(
@@ -93,7 +92,6 @@ class CharStream:
             self.get()  # commit *
             return self.get()  # commit )
 
-        # print(f"{curr=}, {next_=}")
         assert next_ == "\n"
         raise CommentError("comment not closed",
                            (self._pos - 1, self._line, self._col - 1))
@@ -120,7 +118,7 @@ class CharStream:
 
 
 def _is_delimiter(c: str):
-    return c.isspace()  # or c in OPERATORS
+    return c.isspace()
 
 
 def _help_is_identifier(x: str) -> bool:
@@ -159,51 +157,20 @@ def _help_parse_alnum(stream: CharStream, str: str) -> bool:
 
 
 def _help_parse_any_word(stream: CharStream) -> str:
-    if (char := stream._source[stream._pos]).isspace():
-        print(f"{repr(char)} at {stream._pos} was not space")
-        raise AssertionError()
+    assert not _is_delimiter(char := stream._source[stream._pos]), \
+        f"{repr(char)} at {stream._pos} was not space"
 
-    def find():
-        buf = ""
-        is_alnum = False
-        while stream and (curr := stream.get()) and not _is_delimiter(curr):
-            if not buf:
-                is_alnum = curr.isalnum()
-            if curr.isalnum() != is_alnum:
-                stream.put_back()
-                break
-            buf += curr
-        return buf
+    buf = ""
+    is_alnum = False
+    while stream and (curr := stream.get()) and not _is_delimiter(curr):
+        if not buf:
+            is_alnum = curr.isalnum()
+        if curr.isalnum() != is_alnum:
+            stream.put_back()
+            break
+        buf += curr
 
-    word = find()
-
-    # if word == "(*":
-    #     print("HELLO HERE")
-    #     depth = 1
-    #     lparen_found = False
-    #     star_found = False
-    #     while stream and (curr := stream.get()):
-    #         new_lparen_found = curr == "("
-    #         new_star_found = curr == "*"
-
-    #         if lparen_found and new_star_found:
-    #             depth += 1
-    #         elif star_found and curr == ")":
-    #             depth -= 1
-    #         print(f"skipping {repr(curr)}")
-
-    #         lparen_found, star_found = new_lparen_found, new_star_found
-    #         if depth == 0:
-    #             break
-
-    #     print(f"now: {stream}")
-
-    #     if depth != 0:
-    #         raise LexError("unclosed comment found", stream.get_pos())
-    #     word = find()
-    #     print(f"new word={find()}")
-
-    return word
+    return buf
 
 
 def _help_expect_keyword(stream: CharStream, tokens: list[Token], kw: str):
@@ -319,7 +286,6 @@ def _parse_primary_expr(stream: CharStream, tokens: list[Token]):
         return
 
     if word != "(":
-        stream.set_pos(pos)
         raise LexError("expected a '(' here", pos)
     tokens.append(Token(TokenType.DELIMITER, "(", pos))
 
@@ -327,28 +293,25 @@ def _parse_primary_expr(stream: CharStream, tokens: list[Token]):
     try:
         _parse_expr(stream, tokens)
     except LexError as e:
-        stream.set_pos(expr_pos)
         raise LexError("expected an expression here", expr_pos) from e
 
     r_paren_pos = stream.ff_and_get_pos()
     if stream.get() != ")":
-        stream.set_pos(r_paren_pos)
         raise LexError("expected a ')' here", r_paren_pos)
     tokens.append(Token(TokenType.DELIMITER, ")", r_paren_pos))
 
 
 def _parse_app_expr(stream: CharStream, tokens: list[Token]):
-    primary_pos = stream.get_pos()
+    opos = stream.get_pos()
     try:
         primary_pos = stream.ff_and_get_pos()
         _parse_primary_expr(stream, tokens)
     except LexError as e:
-        stream.set_pos(primary_pos)
         raise LexError("expected a <primary_expr> here", primary_pos) from e
     while stream:
-        pos = stream.get_pos()
+        # pos = stream.get_pos()
+        pos = stream.ff_and_get_pos()
         try:
-            pos = stream.ff_and_get_pos()
             _parse_primary_expr(stream, tokens)
         except LexError:
             stream.set_pos(pos)
@@ -357,11 +320,10 @@ def _parse_app_expr(stream: CharStream, tokens: list[Token]):
 
 def _parse_unary_expr(stream: CharStream, tokens: list[Token]):
     # is not or -
-    pos = stream.get_pos()
+    opos = stream.get_pos()
     try:
         pos = stream.ff_and_get_pos()
         if (op := _help_parse_any_word(stream)) not in ("not", "-"):
-            stream.set_pos(pos)
             raise LexError("unary operator not recognized", pos)
         tokens.append(Token(TokenType.OPERATOR, op, pos))
 
@@ -369,102 +331,66 @@ def _parse_unary_expr(stream: CharStream, tokens: list[Token]):
         _parse_app_expr(stream, tokens)
         return
     except LexError:
-        stream.set_pos(pos)
+        stream.set_pos(opos)
 
     # is app_expr instead
-    app_pos = stream.get_pos()
+    # app_pos = stream.get_pos()
+    app_pos = stream.ff_and_get_pos()
     try:
-        app_pos = stream.ff_and_get_pos()
         _parse_app_expr(stream, tokens)
     except LexError as e:
-        stream.set_pos(app_pos)
         raise LexError("expected a <app_expr> here", app_pos) from e
 
 
-def _parse_mult_expr(stream: CharStream, tokens: list[Token]):
-    unary_pos = stream.get_pos()
-    try:
-        unary_pos = stream.ff_and_get_pos()
-        _parse_unary_expr(stream, tokens)
-    except LexError as e:
-        stream.set_pos(unary_pos)
-        raise LexError("expected a <unary_expr> here", unary_pos) from e
-    while stream:
-        pos = stream.get_pos()
-        try:
-            pos = stream.ff_and_get_pos()
-            if (op := _help_parse_any_word(stream)) not in ("*", "/"):
-                stream.set_pos(pos)
-                break
-            tokens.append(Token(TokenType.OPERATOR, op, pos))
-
-            pos = stream.ff_and_get_pos()
-            _parse_unary_expr(stream, tokens)
-        except LexError:
-            stream.set_pos(pos)
-            break
-
-
-def _parse_add_expr(stream: CharStream, tokens: list[Token]):
-    mult_pos = stream.get_pos()
-    try:
-        mult_pos = stream.ff_and_get_pos()
-        _parse_mult_expr(stream, tokens)
-    except LexError as e:
-        stream.set_pos(mult_pos)
-        raise LexError("expected a <mult_expr> here", mult_pos) from e
-    while stream:
-        pos = stream.get_pos()
-        try:
-            pos = stream.ff_and_get_pos()
-            if (op := _help_parse_any_word(stream)) not in ("+", "-"):
-                stream.set_pos(pos)
-                break
-            tokens.append(Token(TokenType.OPERATOR, op, pos))
-
-            pos = stream.ff_and_get_pos()
-            _parse_mult_expr(stream, tokens)
-        except LexError:
-            stream.set_pos(pos)
-            break
-
-
-def _parse_comp_expr(stream: CharStream, tokens: list[Token]):
-    add_pos = stream.get_pos()
-    try:
-        add_pos = stream.ff_and_get_pos()
-        _parse_add_expr(stream, tokens)
-    except LexError as e:
-        stream.set_pos(add_pos)
-        raise LexError("expected a <add_expr> here", add_pos) from e
-    while stream:
-        pos = stream.get_pos()
-        try:
-            pos = stream.ff_and_get_pos()
-            if (op := _help_parse_any_word(stream)) not in ("=", "<>", "<", ">", "<=", ">="):
-                stream.set_pos(pos)
-                break
-            tokens.append(Token(TokenType.OPERATOR, op, pos))
-
-            pos = stream.ff_and_get_pos()
-            _parse_add_expr(stream, tokens)
-        except LexError:
-            stream.set_pos(pos)
-            break
-
-
-def _help_parse_bin_bool_expr(stream: CharStream, tokens: list[Token], parse_sub_expr: Callable[[CharStream, list[Token]], None], sub_name: str, op_str: str):
-    sub_pos = stream.get_pos()
+def _help_parse_bin_expr(stream: CharStream, tokens: list[Token], parse_sub_expr: Callable[[CharStream, list[Token]], None], sub_name: str, ops: tuple[str, ...]):
+    opos = stream.get_pos()
     try:
         sub_pos = stream.ff_and_get_pos()
         parse_sub_expr(stream, tokens)
     except LexError as e:
-        stream.set_pos(sub_pos)
-        raise LexError(f"expected a <{sub_name}_expr> here", sub_pos) from e
+        raise LexError(f"expected a <{sub_name}_expr> here", opos) from e
     while stream:
-        pos = stream.get_pos()
+        opos = stream.get_pos()
         try:
             pos = stream.ff_and_get_pos()
+            if (op := _help_parse_any_word(stream)) not in ops:
+                stream.set_pos(pos)
+                break
+            tokens.append(Token(TokenType.OPERATOR, op, pos))
+
+            pos = stream.ff_and_get_pos()
+            parse_sub_expr(stream, tokens)
+        except LexError:
+            stream.set_pos(opos)
+            break
+
+
+def _parse_mult_expr(stream: CharStream, tokens: list[Token]):
+    _help_parse_bin_expr(
+        stream, tokens, _parse_unary_expr, "unary", ("*", "/"))
+
+
+def _parse_add_expr(stream: CharStream, tokens: list[Token]):
+    _help_parse_bin_expr(
+        stream, tokens, _parse_mult_expr, "mult", ("+", "-"))
+
+
+def _parse_comp_expr(stream: CharStream, tokens: list[Token]):
+    _help_parse_bin_expr(
+        stream, tokens, _parse_add_expr, "add", ("=", "<>", "<", ">", "<=", ">="))
+
+
+def _help_parse_bin_bool_expr(stream: CharStream, tokens: list[Token], parse_sub_expr: Callable[[CharStream, list[Token]], None], sub_name: str, op_str: str):
+    # sub_pos = stream.get_pos()
+    sub_pos = stream.ff_and_get_pos()
+    try:
+        parse_sub_expr(stream, tokens)
+    except LexError as e:
+        raise LexError(f"expected a <{sub_name}_expr> here", sub_pos) from e
+    while stream:
+        # pos = stream.get_pos()
+        pos = stream.ff_and_get_pos()
+        try:
             if not _help_parse_operator(stream, op_str):
                 stream.set_pos(pos)
                 break
@@ -473,59 +399,15 @@ def _help_parse_bin_bool_expr(stream: CharStream, tokens: list[Token], parse_sub
             pos = stream.ff_and_get_pos()
             parse_sub_expr(stream, tokens)
         except LexError:
-            stream.set_pos(pos)
             break
 
 
 def _parse_and_expr(stream: CharStream, tokens: list[Token]):
     _help_parse_bin_bool_expr(stream, tokens, _parse_comp_expr, "comp", "&&")
 
-    # comp_pos = stream.get_pos()
-    # try:
-    #     comp_pos = stream.ff_and_get_pos()
-    #     _parse_comp_expr(stream, tokens)
-    # except LexError as e:
-    #     stream.set_pos(comp_pos)
-    #     raise LexError("expected a <comp_expr> here", comp_pos) from e
-    # while stream:
-    #     pos = stream.get_pos()
-    #     try:
-    #         pos = stream.ff_and_get_pos()
-    #         if not _help_parse_operator(stream, "&&"):
-    #             stream.set_pos(pos)
-    #             break
-    #         tokens.append(Token(TokenType.OPERATOR, "&&", pos))
-
-    #         pos = stream.ff_and_get_pos()
-    #         _parse_comp_expr(stream, tokens)
-    #     except LexError:
-    #         stream.set_pos(pos)
-    #         break
-
 
 def _parse_or_expr(stream: CharStream, tokens: list[Token]):
     _help_parse_bin_bool_expr(stream, tokens, _parse_and_expr, "and", "||")
-    # and_pos = stream.get_pos()
-    # try:
-    #     and_pos = stream.ff_and_get_pos()
-    #     _parse_and_expr(stream, tokens)
-    # except LexError as e:
-    #     stream.set_pos(and_pos)
-    #     raise LexError("expected a <and_expr> here", and_pos) from e
-    # while stream:
-    #     pos = stream.get_pos()
-    #     try:
-    #         pos = stream.ff_and_get_pos()
-    #         if not _help_parse_operator(stream, "||"):
-    #             stream.set_pos(pos)
-    #             break
-    #         tokens.append(Token(TokenType.OPERATOR, "||", pos))
-
-    #         pos = stream.ff_and_get_pos()
-    #         _parse_and_expr(stream, tokens)
-    #     except LexError:
-    #         stream.set_pos(pos)
-    #         break
 
 
 def _parse_expr(stream: CharStream, tokens: list[Token]):
@@ -557,6 +439,7 @@ def lex(source: str) -> list[Token]:
     except LexError as e:
         if len(out) == 0:  # empty tokens isnt error
             return []
+        print(out)
         raise e
     except CommentError as c:
         raise LexError(c.msg, (c.pos, c.line, c.col)) from c
