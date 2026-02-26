@@ -1,5 +1,3 @@
-from typing import TextIO
-
 from lexer import lex, LexError
 from parse import parse, ParseError
 
@@ -16,8 +14,8 @@ def print_error_open_file(file: str):
     raise SystemExit
 
 
-def print_error_loc(msg: str, filename: str, source: str, line: int, col: int):
-    print(f"{BOLD_HI_RED}ERROR: {RED}{msg} {BLUE}at {RESET}{filename}:{line}:{col}")
+def print_error_loc(kind: str, msg: str, filename: str, source: str, line: int, col: int):
+    print(f"{BOLD_HI_RED}{kind} ERROR: {RED}{msg} {BLUE}at {RESET}{filename}:{line}:{col}")
     bad_line = source.splitlines()[line - 1] + " "
     indicator = ""
     for i, c in enumerate(bad_line):
@@ -47,13 +45,13 @@ def main():
             source = f.read() + "\n"
             try:
                 tokens = lex(source)
-                print(tokens)
+                # print(*tokens, sep="\n")
                 ast = parse(tokens)
                 print(ast)
             except LexError as e:
-                print_error_loc(e.msg, f.name, source, e.line, e.col)
+                print_error_loc("LEX", e.msg, f.name, source, e.line, e.col)
             except ParseError as e:
-                print_error_loc(e.msg, f.name, source, e.line, e.col)
+                print_error_loc("PARSE", e.msg, f.name, source, e.line, e.col)
             return
 
 

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import IntEnum
 
 
@@ -10,11 +11,8 @@ class TokenType(IntEnum):
     DELIMITER = 5
 
 
+@dataclass
 class Token:
-    def __init__(self, type: TokenType, value: str, pos: tuple[int, int, int]):
-        self.type = type
-        self.value = value
-        self.pos, self.line, self.column = pos
-
-    def __repr__(self) -> str:
-        return f"Token({self.type.name}, '{self.value}', [{self.line}:{self.column}])"
+    type: TokenType
+    value: str
+    pos: tuple[int, int]  # (line, col)

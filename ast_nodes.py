@@ -1,61 +1,86 @@
-class IntLiteral:
-    def __init__(self, value: int):
-        self.value = value
+from tokens import dataclass
 
-    def __repr__(self):
+type Expression = "IntLiteral | BoolLiteral | Variable | BinaryOp | UnaryOp | Let | If | Fun | App"
+
+
+@dataclass
+class IntLiteral:
+    value: int
+
+    def __repr__(self) -> str:
         return f"IntLiteral({self.value})"
 
 
+@dataclass
 class BoolLiteral:
-    def __init__(self, value: bool):
-        self.value = value
+    value: bool
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"BoolLiteral({self.value})"
 
 
+@dataclass
 class Variable:
-    pass
+    name: str
+
+    def __repr__(self) -> str:
+        return f"Variable({self.name!r})"
 
 
+@dataclass
 class BinaryOp:
-    def __init__(self, op: str, left, right):
-        self.op = op
-        self.left = left
-        self.right = right
+    op: str
+    left: Expression
+    right: Expression
 
-    def __repr__(self):
-        return f"BinaryOp({self.op}, {self.left}, {self.right})"
+    def __repr__(self) -> str:
+        return f"BinaryOp({self.op!r}, {self.left!r}, {self.right!r})"
 
 
+@dataclass
 class UnaryOp:
-    def __init__(self, op: str, operand):
-        self.op = op
-        self.operand = operand
+    op: str
+    operand: Expression
 
-    def __repr__(self):
-        return f"UnaryOp({self.op}, {self.operand})"
+    def __repr__(self) -> str:
+        return f"UnaryOp({self.op!r}, {self.operand!r})"
 
 
+@dataclass
 class Let:
-    pass
+    recursive: bool
+    name: Variable
+    params: list[Variable]
+    binding: Expression
+    inside: Expression
+
+    def __repr__(self) -> str:
+        return f"Let({self.recursive}, {self.name!r}, {self.params}, {self.binding!r}, {self.inside!r})"
 
 
+@dataclass
 class If:
-    def __init__(self, cond, yes, no):
-        self.cond = cond
-        self.yes = yes
-        self.no = no
+    cond: Expression
+    yes: Expression
+    no: Expression
+
+    def __repr__(self) -> str:
+        return f"If({self.cond!r}, {self.yes!r}, {self.no!r})"
 
 
+@dataclass
 class Fun:
-    pass
+    params: list[Variable]
+    definition: Expression
+
+    def __repr__(self) -> str:
+        return f"Fun({self.params}, {self.definition!r})"
 
 
+@dataclass
 class App:
-    pass
+    name: Variable
+    params: list[Expression]
 
-
-class AST:
-    def __repr__(self):
-        return f"AST()"
+    def __repr__(self) -> str:
+        return f"App({self.name!r}, {self.params})"
